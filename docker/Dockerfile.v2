@@ -1,0 +1,46 @@
+# DGX Spark Qwen3.5-35B-A3B v2
+#
+# Optimization stack on top of the SM121-compiled vLLM base:
+#   1. Hybrid INT4+FP8 dense layers  (via inc.py overlay, activated when the
+#      checkpoint on disk contains FP8 weights)
+#   2. MTP-2 speculative decoding   (enabled by --speculative-config at runtime)
+#   3. INT8 LM Head v2               (runtime patch via entrypoint)
+#
+# Tested with: vLLM 0.19.1
+# Base image (built via eugr/spark-vllm-docker): vllm-sm121:latest
+#   TORCH_CUDA_ARCH_LIST=12.1a, --tf5 (transformers>=5)
+#
+# Build:
+#   docker build -t vllm-qwen35b-v2 -f docker/Dockerfile.v2 .
+#
+# Run (hybrid INT4+FP8 checkpoint, all optimizations):
+#   docker run --gpus all --net=host --ipc=host \
+#     -v ~/models:/models \
+#     vllm-qwen35b-v2 \
+#     serve /models/qwen35b-hybrid-int4fp8 \
+#     --served-model-name qwen --port 8000 --host 0.0.0.0 \
+#     --max-model-len 262144 --gpu-memory-utilization 0.90 \
+#     --reasoning-parser qwen3 --attention-backend FLASHINFER \
+#     --speculative-config '{"method":"mtp","num_speculative_tokens":2}' \
+#     --enable-auto-tool-choice --tool-call-parser qwen3_xml \
+#     --trust-remote-code --chat-template /opt/unsloth.jinja
+
+FROM vllm-sm121:latest
+
+# Patch 1: Hybrid INT4+FP8 dispatch (overlays vLLM's INC quantization module).
+# Activates when the checkpoint on disk contains FP8 tensors alongside INT4
+# (detected from safetensors metadata — no hardcoded layer names).
+COPY patches/01-hybrid-int4-fp8/inc.py \
+     /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/quantization/inc.py
+
+# Patch 3: INT8 LM Head v2 (applied at runtime by entrypoint)
+# Model-independent — targets vLLM's logits_processor._get_logits().
+# Activates when lm_head.weight is bf16/fp16 and vocab > 100k.
+COPY patches/03-int8-lm-head/patch_int8_lmhead.py /opt/patches/patch_int8_lmhead.py
+
+# Entrypoint applies runtime patches, then launches vLLM
+COPY docker/entrypoint-v2.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
+
+ENTRYPOINT ["/opt/entrypoint.sh"]
+CMD ["serve", "--help"]

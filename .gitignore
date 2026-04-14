@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# Model checkpoints (do NOT commit — download from HF)
+models/
+*.safetensors
+*.bin
+*.gguf
+*.pt
+
+# Benchmark raw logs
+benchmarks/raw/
+benchmarks/*.log
+
+# Wheels (downloaded during build)
+wheels/
+*.whl
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.tar.gz
+
+# Temporary
+/tmp/
+*.tmp
+build-metadata.yaml
+
+# Clone of upstream eugr repo (if install.sh clones it)
+spark-vllm-docker/

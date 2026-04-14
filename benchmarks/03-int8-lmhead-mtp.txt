@@ -1,0 +1,20 @@
+╔══════════════════════════════════════════════════════╗
+║  Qwen3.5-35B-A3B Benchmark: v2-int8-lmhead+mtp
+║  Tue Apr 14 17:26:06 +03 2026
+╚══════════════════════════════════════════════════════╝
+
+── Run 1/2 ──────────────────────────────────────
+  [Q&A] 256 tokens in 3.68s = 69.5 tok/s (prompt: 23)
+  [Code] 494 tokens in 4.10s = 120.4 tok/s (prompt: 30)
+  [JSON] 1024 tokens in 8.79s = 116.4 tok/s (prompt: 48)
+  [Math] 64 tokens in .60s = 106.6 tok/s (prompt: 29)
+  [LongCode] 2048 tokens in 16.38s = 125.0 tok/s (prompt: 37)
+
+── Run 2/2 ──────────────────────────────────────
+  [Q&A] 256 tokens in 2.32s = 110.3 tok/s (prompt: 23)
+  [Code] 428 tokens in 3.51s = 121.9 tok/s (prompt: 30)
+  [JSON] 1024 tokens in 8.54s = 119.9 tok/s (prompt: 48)
+  [Math] 64 tokens in .57s = 112.2 tok/s (prompt: 29)
+  [LongCode] 2048 tokens in 16.30s = 125.6 tok/s (prompt: 37)
+
+=== Done ===
