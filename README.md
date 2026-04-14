@@ -15,14 +15,7 @@ Benchmarked on a single NVIDIA DGX Spark (GB10, SM121, 128 GB LPDDR5x) running [
 | + MTP-2 speculative decoding (**recommended**) | **112.8** | 125.3 | +36.2% | +76% |
 | + Hybrid INT4+FP8 (optional, low-ROI) | 114.8 | **128.1** | +1.8% | +79% |
 
-For reference, Anthropic API throughput (ArtificialAnalysis.ai, April 2026):
-- Claude Opus 4.6: ~40 tok/s
-- Claude Sonnet 4.6: ~50 tok/s
-- Claude Haiku 4.5: ~97 tok/s
-
-**Our peak 128 tok/s beats Claude Haiku 4.5. Our average 113 tok/s beats Claude Sonnet 4.6.**
-
-*Trade-off note:* these are speed benchmarks. Qwen3.5-35B-A3B has 3B active parameters vs. Claude Opus's likely 30B+. For simple coding/chat/summary the quality is close; for long complex synthesis (Tetris from scratch, multi-file refactors) Claude's larger models still win on quality. Use 35B for speed-sensitive work; fall back to Qwen3.5-122B or Claude for complexity.
+*Trade-off note:* these are speed benchmarks. Qwen3.5-35B-A3B has 3B active parameters and is aimed at memory-bandwidth-limited hardware. Simple code/chat/summary quality is strong; long complex synthesis (writing a full game from scratch, multi-file refactors) benefits from larger models. Use 35B for speed-sensitive interactive work; fall back to Qwen3.5-122B for complexity-heavy tasks.
 
 ## Quick Start
 

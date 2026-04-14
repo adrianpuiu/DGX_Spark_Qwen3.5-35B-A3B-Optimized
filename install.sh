@@ -73,7 +73,9 @@ step() {
     STEP_NUM=$((STEP_NUM + 1))
     echo
     log "${C_CYN}▶ [${STEP_NUM}] $1${C_OFF}"
-    [ -n "${2:-}" ] && note "$2"
+    if [ -n "${2:-}" ]; then
+        note "$2"
+    fi
 }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
@@ -128,7 +130,7 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install -q -U pip
-pip install -q torch numpy safetensors "huggingface_hub[cli]"
+pip install -q torch numpy safetensors huggingface_hub
 
 # ── Phase 0: download Intel INT4 ──────────────────────────────────────────────
 step "Phase 0 — Downloading Intel/Qwen3.5-35B-A3B-int4-AutoRound" \
@@ -246,7 +248,7 @@ docker images vllm-qwen35b-v2 --format '   {{.Repository}}:{{.Tag}}   {{.Size}}'
 echo
 
 # ── Launch (prompt or auto) ──────────────────────────────────────────────────
-CHAT_TEMPLATE_SRC="${SPARK_VLLM_DIR}/mods/fix-qwen3.5-chat-template/chat_template.jinja"
+CHAT_TEMPLATE_SRC="${PROJECT_DIR}/configs/chat_template.jinja"
 
 build_launch_cmd() {
     local mount_model_arg=""

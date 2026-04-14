@@ -3,12 +3,12 @@
 # Expected: ~113 tok/s average, ~125 tok/s peak on DGX Spark.
 # No hybrid checkpoint needed — works with plain Intel INT4 AutoRound.
 
-SPARK_VLLM_DIR="${SPARK_VLLM_DIR:-$(dirname "$(dirname "$(realpath "$0")")")/spark-vllm-docker}"
+PROJECT_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
 
 docker run -d --name vllm-qwen35b \
     --gpus all --net=host --ipc=host \
     -v "${HOME}/.cache/huggingface:/root/.cache/huggingface" \
-    -v "${SPARK_VLLM_DIR}/mods/fix-qwen3.5-chat-template/chat_template.jinja:/opt/unsloth.jinja:ro" \
+    -v "${PROJECT_DIR}/configs/chat_template.jinja:/opt/unsloth.jinja:ro" \
     -e VLLM_MARLIN_USE_ATOMIC_ADD=1 \
     vllm-qwen35b-v2 \
     serve Intel/Qwen3.5-35B-A3B-int4-AutoRound \

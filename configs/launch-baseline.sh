@@ -3,12 +3,13 @@
 # Expected: ~64 tok/s on DGX Spark.
 # Use this to benchmark what the raw model does before v2 optimizations.
 
-SPARK_VLLM_DIR="${SPARK_VLLM_DIR:-$(dirname "$(dirname "$(realpath "$0")")")/spark-vllm-docker}"
+PROJECT_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
 
 docker run -d --name vllm-qwen35b-baseline \
     --gpus all --net=host --ipc=host \
+    --entrypoint vllm \
     -v "${HOME}/.cache/huggingface:/root/.cache/huggingface" \
-    -v "${SPARK_VLLM_DIR}/mods/fix-qwen3.5-chat-template/chat_template.jinja:/opt/unsloth.jinja:ro" \
+    -v "${PROJECT_DIR}/configs/chat_template.jinja:/opt/unsloth.jinja:ro" \
     -e VLLM_MARLIN_USE_ATOMIC_ADD=1 \
     vllm-node-tf5 \
     serve Intel/Qwen3.5-35B-A3B-int4-AutoRound \

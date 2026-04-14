@@ -9,7 +9,7 @@
 # Requires: hybrid checkpoint built via `install.sh --hybrid` at
 #           ~/models/qwen35b-hybrid-int4fp8/
 
-SPARK_VLLM_DIR="${SPARK_VLLM_DIR:-$(dirname "$(dirname "$(realpath "$0")")")/spark-vllm-docker}"
+PROJECT_DIR="$(dirname "$(dirname "$(realpath "$0")")")"
 HYBRID_MODEL_DIR="${HYBRID_MODEL_DIR:-${HOME}/models/qwen35b-hybrid-int4fp8}"
 
 if [ ! -f "${HYBRID_MODEL_DIR}/model.safetensors.index.json" ]; then
@@ -22,7 +22,7 @@ docker run -d --name vllm-qwen35b \
     --gpus all --net=host --ipc=host \
     -v "${HOME}/models:/models" \
     -v "${HOME}/.cache/huggingface:/root/.cache/huggingface" \
-    -v "${SPARK_VLLM_DIR}/mods/fix-qwen3.5-chat-template/chat_template.jinja:/opt/unsloth.jinja:ro" \
+    -v "${PROJECT_DIR}/configs/chat_template.jinja:/opt/unsloth.jinja:ro" \
     -e VLLM_MARLIN_USE_ATOMIC_ADD=1 \
     vllm-qwen35b-v2 \
     serve /models/qwen35b-hybrid-int4fp8 \
