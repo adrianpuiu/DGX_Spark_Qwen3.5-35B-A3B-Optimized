@@ -29,10 +29,15 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPARK_VLLM_DIR="${PROJECT_DIR}/spark-vllm-docker"
 HYBRID_DIR="${HOME}/models/qwen35b-hybrid-int4fp8"
 SPARK_VLLM_PIN="49d6d9fefd7cd05e63af8b28e4b514e9d30d249f"
-TORCH_NIGHTLY_DATE="20260408"
-TORCH_VERSION="2.12.0.dev${TORCH_NIGHTLY_DATE}+cu130"
-TORCHVISION_VERSION="0.27.0.dev${TORCH_NIGHTLY_DATE}+cu130"
-TORCHAUDIO_VERSION="2.11.0.dev${TORCH_NIGHTLY_DATE}+cu130"
+
+# PyTorch nightly: resolved at runtime (see resolve_torch_nightly). Nightly wheels
+# are garbage-collected after ~2 weeks, so any hardcoded date rots. We anchor on
+# torchvision (the package that pins an exact torch dev-date in its metadata) and
+# derive a mutually-consistent torch/torchaudio set — the same thing uv would pick
+# unpinned, but captured so both Docker stages build against identical wheels.
+# Override the torchvision date by exporting TORCH_NIGHTLY_DATE=YYYYMMDD.
+PYTORCH_NIGHTLY_INDEX="https://download.pytorch.org/whl/nightly/cu130"
+TORCH_PLATFORM_TAG="cp312-cp312-manylinux_2_28_aarch64"
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
 BUILD_HYBRID=0
@@ -76,6 +81,90 @@ step() {
     if [ -n "${2:-}" ]; then
         note "$2"
     fi
+}
+
+# ── PyTorch nightly resolution ────────────────────────────────────────────────
+# nightly_dates <pkg> — YYYYMMDD dates on the cu130 index for pkg (aarch64/cp312)
+nightly_dates() {
+    curl -fsSL "${PYTORCH_NIGHTLY_INDEX}/$1/" 2>/dev/null \
+        | grep -oE "$1-[0-9.]+\.dev[0-9]{8}\+cu130-${TORCH_PLATFORM_TAG}\.whl" \
+        | grep -oE '[0-9]{8}' | sort -u
+}
+
+# nightly_version <pkg> <date> — full version string, e.g. 2.13.0.dev20260607+cu130
+nightly_version() {
+    curl -fsSL "${PYTORCH_NIGHTLY_INDEX}/$1/" 2>/dev/null \
+        | grep -oE "$1-[0-9.]+\.dev$2\+cu130-${TORCH_PLATFORM_TAG}\.whl" \
+        | head -n1 | sed -E "s/^$1-(.+)-${TORCH_PLATFORM_TAG}\.whl\$/\1/"
+}
+
+# torchvision_torch_req <date> — the exact torch version torchvision[date] pins in
+# its wheel metadata (e.g. 2.13.0.dev20260603), or empty. torchvision nightlies are
+# built against a *specific* torch nightly that is often a few days older than their
+# own date, so we must read it rather than assume same-day.
+torchvision_torch_req() {
+    local href
+    href=$(curl -fsSL "${PYTORCH_NIGHTLY_INDEX}/torchvision/" 2>/dev/null \
+        | grep -oE "https://[^\"]*torchvision-[0-9.]+\.dev$1%2Bcu130-${TORCH_PLATFORM_TAG}\.whl" \
+        | head -n1)
+    [ -n "${href}" ] || return 0
+    curl -fsSL --retry 2 "${href}.metadata" 2>/dev/null \
+        | grep -iE '^Requires-Dist: *torch *[(]?==' \
+        | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.dev[0-9]{8}'
+}
+
+# resolve_torch_nightly — set TORCH_VERSION/TORCHVISION_VERSION/TORCHAUDIO_VERSION to
+# a mutually-consistent set. Anchors on torchvision (newest available, or a forced
+# date), reads the exact torch it requires from metadata, and aligns torchaudio to
+# torch's date for ABI consistency. Walks back to older torchvision dates if the
+# required torch wheel is no longer on the index. Reading versions off the index
+# also survives base-version bumps (e.g. 2.12.0 → 2.13.0).
+resolve_torch_nightly() {
+    local dates d vver treq tver tdate aver adate
+    if [ -n "${TORCH_NIGHTLY_DATE:-}" ]; then
+        dates="${TORCH_NIGHTLY_DATE}"
+        note "PyTorch nightly: anchoring on pinned torchvision date ${TORCH_NIGHTLY_DATE}"
+    else
+        dates=$(nightly_dates torchvision | sort -r)   # newest first
+    fi
+
+    for d in ${dates}; do
+        vver=$(nightly_version torchvision "${d}" || true)
+        [ -n "${vver}" ] || continue
+
+        treq=$(torchvision_torch_req "${d}" || true)
+        if [ -n "${treq}" ]; then
+            tdate=$(echo "${treq}" | grep -oE '[0-9]{8}')
+        else
+            # metadata unreadable (e.g. older scheme with no torch pin): assume same-day
+            tdate="${d}"
+        fi
+
+        tver=$(nightly_version torch "${tdate}" || true)
+        [ -n "${tver}" ] || continue   # required torch wheel gone; try an older torchvision
+
+        # torchaudio: prefer torch's date (ABI-aligned), else latest available <= d
+        aver=$(nightly_version torchaudio "${tdate}" || true)
+        if [ -z "${aver}" ]; then
+            adate=$(nightly_dates torchaudio | awk -v hi="${d}" '$1<=hi' | tail -n1)
+            [ -n "${adate}" ] && aver=$(nightly_version torchaudio "${adate}" || true)
+        fi
+        [ -n "${aver}" ] || continue
+
+        TORCH_VERSION="${tver}"
+        TORCHVISION_VERSION="${vver}"
+        TORCHAUDIO_VERSION="${aver}"
+        note "PyTorch nightly resolved (torchvision-anchored):"
+        note "  torch==${TORCH_VERSION}"
+        note "  torchvision==${TORCHVISION_VERSION}"
+        note "  torchaudio==${TORCHAUDIO_VERSION}"
+        return 0
+    done
+
+    if [ -n "${TORCH_NIGHTLY_DATE:-}" ]; then
+        abort "Could not resolve a consistent PyTorch nightly set for torchvision date ${TORCH_NIGHTLY_DATE} (${TORCH_PLATFORM_TAG}). Unset TORCH_NIGHTLY_DATE to auto-detect, or pick a date from ${PYTORCH_NIGHTLY_INDEX}/torchvision/."
+    fi
+    abort "Could not reach/resolve the PyTorch nightly index at ${PYTORCH_NIGHTLY_INDEX}. Check connectivity, or pin a known-good date with TORCH_NIGHTLY_DATE=YYYYMMDD."
 }
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
@@ -208,6 +297,7 @@ else
         "${SPARK_VLLM_DIR}/Dockerfile"
 
     # Pin PyTorch nightly in both stages for ABI consistency
+    resolve_torch_nightly
     sed -i "s|uv pip install torch torchvision torchaudio triton --index-url https://download.pytorch.org/whl/nightly/cu130|uv pip install torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} torchaudio==${TORCHAUDIO_VERSION} triton --index-url https://download.pytorch.org/whl/nightly/cu130|g" \
         "${SPARK_VLLM_DIR}/Dockerfile"
 
