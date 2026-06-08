@@ -307,6 +307,19 @@ else
             "${SPARK_VLLM_DIR}/Dockerfile"
     fi
 
+    # Keep the cu130 torch nightly from being silently clobbered by a CPU wheel.
+    # The Dockerfile installs torch==…dev…+cu130 first, but later `uv pip install`
+    # invocations in the same stage (the vLLM/flashinfer wheels — flashinfer_python
+    # declares a bare `torch` dep — plus ray/fastsafetensors) re-resolve torch. uv's
+    # default prerelease policy (if-necessary-or-explicit) then refuses the installed
+    # .dev nightly (not explicitly requested in *that* invocation) and pulls stable
+    # torch==2.10.0 from PyPI, which on aarch64 is CPU-only → no libtorch_cuda.so →
+    # `import vllm._C` fails at runtime. Allowing prereleases makes uv keep the nightly.
+    if ! grep -q 'UV_PRERELEASE' "${SPARK_VLLM_DIR}/Dockerfile"; then
+        sed -i -E '/^FROM .* AS (vllm-builder|runner)$/a ENV UV_PRERELEASE=allow' \
+            "${SPARK_VLLM_DIR}/Dockerfile"
+    fi
+
     (
         cd "${SPARK_VLLM_DIR}"
         ./build-and-copy.sh -t vllm-sm121 --vllm-ref v0.19.0 --tf5
